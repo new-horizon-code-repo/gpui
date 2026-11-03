@@ -109,6 +109,8 @@ pub struct UiInteraction {
     pub focused: bool,
     /// The pointer is over it in this frame.
     pub hovered: bool,
+    /// It runs app code on hover (`.on_hover(..)`), or joins a hover group.
+    pub hover_listener: bool,
     /// It shows a tooltip.
     pub tooltip: bool,
     /// Its explicit tab index, if any.

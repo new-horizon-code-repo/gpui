@@ -2612,6 +2612,7 @@ impl Interactivity {
                             .as_ref()
                             .is_some_and(|handle| handle.is_focused(window)),
                         hovered: self.hovered.unwrap_or(false),
+                        hover_listener: self.hover_listener.is_some() || self.group.is_some(),
                         tooltip: self.tooltip_builder.is_some(),
                         tab_index: self.tab_index,
                         key_context: self.key_context.is_some(),
