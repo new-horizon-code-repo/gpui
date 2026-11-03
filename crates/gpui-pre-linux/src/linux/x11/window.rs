@@ -1793,6 +1793,20 @@ impl PlatformWindow for X11Window {
             .clone()
     }
 
+    // Fork (new-horizon-code-repo/gpui): window capture through the window's own renderer.
+    fn render_to_image(&self, scene: &Scene) -> anyhow::Result<image::RgbaImage> {
+        let mut state = self.0.state.borrow_mut();
+        let renderer = state
+            .renderer
+            .as_mut()
+            .context("the window has no renderer")?;
+        anyhow::ensure!(
+            !renderer.device_lost(),
+            "the GPU device was lost; try again after the next frame"
+        );
+        renderer.render_to_image(scene)
+    }
+
     fn show_window_menu(&self, position: Point<Pixels>) {
         let state = self.0.state.borrow();
 

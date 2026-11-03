@@ -58,6 +58,7 @@ screen-capture = ["gpui/screen-capture", "scap"]
 accesskit = { workspace = true }
 accesskit_unix = { workspace = true, optional = true }
 anyhow = { workspace = true }
+image = { workspace = true }
 bytemuck = { workspace = true }
 collections = { workspace = true }
 futures = { workspace = true }
