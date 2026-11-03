@@ -704,6 +704,7 @@ impl MetalRenderer {
     ///
     /// Note: This requires a layer-backed renderer. For headless rendering,
     /// use `render_scene_to_image()` instead.
+    /// The pixels are premultiplied by alpha, as Metal blends them.
     pub fn render_to_image(&mut self, scene: &Scene) -> Result<RgbaImage> {
         let layer = self
             .layer
