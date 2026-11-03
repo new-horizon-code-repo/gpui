@@ -103,8 +103,10 @@ pub struct UiStates {
 pub struct UiInteraction {
     /// It has click or mouse-down handlers.
     pub clickable: bool,
-    /// It tracks a focus handle, so the keyboard can reach it.
+    /// It tracks a focus handle.
     pub focusable: bool,
+    /// Its focus handle is in the Tab order (`FocusHandle::tab_stop`).
+    pub tab_stop: bool,
     /// It holds focus in this frame.
     pub focused: bool,
     /// The pointer is over it in this frame.

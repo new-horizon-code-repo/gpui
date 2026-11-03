@@ -2607,6 +2607,10 @@ impl Interactivity {
                         clickable: !self.click_listeners.is_empty()
                             || !self.mouse_down_listeners.is_empty(),
                         focusable: self.tracked_focus_handle.is_some(),
+                        tab_stop: self
+                            .tracked_focus_handle
+                            .as_ref()
+                            .is_some_and(|handle| handle.tab_stop),
                         focused: self
                             .tracked_focus_handle
                             .as_ref()
