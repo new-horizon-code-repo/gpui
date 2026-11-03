@@ -4,7 +4,7 @@ This repository is an unofficial fork of [GPUI](https://github.com/zed-industrie
 
 - **Base:** `gpui-pre` 0.3.11 from crates.io, a snapshot of `zed-industries/zed` at `f816e1f`. The first commit is that published source, unmodified.
 - **Change:** a UI snapshot API. `Window::request_ui_snapshot()` makes the next frame repaint every view without cache reuse and record each painted element (bounds, clip, resolved style, content size, source location) and each piece of text (text as given and as shown, font size, line height, run colors). `Window::take_ui_snapshot()` returns it. Frames without a request record nothing.
-- **Why:** design-review tools such as [impeccable](https://github.com/Deichor/impeccable) need what the window actually painted to check contrast, text size, and overflow.
+- **Why:** design-review tools such as [impeccable](https://github.com/new-horizon-code-repo/impeccable) need what the window actually painted to check contrast, text size, and overflow.
 
 Modified files carry a `Fork (new-horizon-code-repo/gpui)` comment at each change: `Cargo.toml`, `src/gpui.rs`, `src/window.rs`, `src/view.rs`, `src/elements/div.rs`, `src/elements/text.rs`. New files: `src/ui_snapshot.rs`, `tests/ui_snapshot.rs`.
 
