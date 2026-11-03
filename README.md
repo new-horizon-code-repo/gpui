@@ -17,6 +17,16 @@ gpui-pre = { git = "https://github.com/new-horizon-code-repo/gpui", branch = "ma
 
 Run the fork's test with `cargo test --features test-support --test ui_snapshot`.
 
+### Window capture on Linux
+
+`Window::render_to_image()` is no longer limited to `test-support` (`src/platform.rs`, `src/window.rs`). On Linux it renders the last frame into an offscreen texture with the window's own wgpu device and sprite atlas and reads it back, on X11 and Wayland alike, without presenting. The Linux platform crates are vendored for it, each first committed as the published 0.3.11 source: `crates/gpui-pre-wgpu` (`WgpuRenderer::render_to_image`, readback shared with the headless renderer, `image` no longer optional) and `crates/gpui-pre-linux` (the X11 and Wayland windows call it). Patch them too:
+
+```toml
+[patch.crates-io]
+gpui-pre-wgpu = { git = "https://github.com/new-horizon-code-repo/gpui", branch = "main" }
+gpui-pre-linux = { git = "https://github.com/new-horizon-code-repo/gpui", branch = "main" }
+```
+
 ## License
 
 Apache-2.0, like upstream GPUI. See [LICENSE-APACHE](LICENSE-APACHE). Copyright for the original code stays with Zed Industries, Inc.
