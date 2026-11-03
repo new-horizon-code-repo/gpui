@@ -489,13 +489,26 @@ impl<E: IntoElement + 'static> Element for AnimationElement<E> {
         &mut self,
         _id: Option<&GlobalElementId>,
         _inspector_id: Option<&InspectorElementId>,
-        _bounds: crate::Bounds<crate::Pixels>,
+        bounds: crate::Bounds<crate::Pixels>,
         element: &mut Self::RequestLayoutState,
         _: &mut Self::PrepaintState,
         window: &mut Window,
         cx: &mut App,
     ) {
+        // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+        let recorded = window.is_recording_ui_snapshot()
+            && self.animations.last().is_some_and(|animation| {
+                window.enter_ui_animation(
+                    bounds,
+                    animation.duration,
+                    animation.oneshot,
+                    &*animation.easing,
+                )
+            });
         element.paint(window, cx);
+        if recorded {
+            window.exit_ui_element();
+        }
     }
 }
 

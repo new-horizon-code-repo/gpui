@@ -2596,14 +2596,38 @@ impl Interactivity {
                 }
 
                 // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
-                let recorded = window.is_recording_ui_snapshot()
-                    && window.enter_ui_element(
+                let recorded = window.is_recording_ui_snapshot() && {
+                    let states = crate::UiStates {
+                        hover: self.hover_style.clone(),
+                        active: self.active_style.clone(),
+                        focus: self.focus_style.clone(),
+                        focus_visible: self.focus_visible_style.clone(),
+                    };
+                    let interaction = crate::UiInteraction {
+                        clickable: !self.click_listeners.is_empty()
+                            || !self.mouse_down_listeners.is_empty(),
+                        focusable: self.tracked_focus_handle.is_some(),
+                        focused: self
+                            .tracked_focus_handle
+                            .as_ref()
+                            .is_some_and(|handle| handle.is_focused(window)),
+                        hovered: self.hovered.unwrap_or(false),
+                        tooltip: self.tooltip_builder.is_some(),
+                        tab_index: self.tab_index,
+                        key_context: self.key_context.is_some(),
+                        actions: self.action_listeners.len(),
+                        label: self.aria.label.clone(),
+                    };
+                    window.enter_ui_element(
                         self.source_location(),
                         global_id.map(|id| id.to_string().into()),
                         bounds,
                         &style,
                         self.content_size,
-                    );
+                        states,
+                        interaction,
+                    )
+                };
 
                 window.with_element_opacity(style.opacity, |window| {
                     style.paint(bounds, window, cx, |window: &mut Window, cx: &mut App| {

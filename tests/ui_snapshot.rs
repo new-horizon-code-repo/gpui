@@ -1,7 +1,8 @@
 // Added in the new-horizon-code-repo/gpui fork; not part of upstream GPUI.
 
+use gpui::prelude::*;
 use gpui::{
-    AppContext as _, Context, IntoElement, ParentElement, Render, Styled, TestAppContext,
+    AnimationExt as _, Context, IntoElement, ParentElement, Render, Styled, TestAppContext,
     UiNodeKind, Window, div, px, rgb,
 };
 
@@ -75,4 +76,72 @@ fn frames_without_a_request_record_nothing(cx: &mut TestAppContext) {
         .unwrap();
     assert!(!snapshot.0);
     assert!(snapshot.1.is_none());
+}
+
+struct Controls;
+
+impl Render for Controls {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .size_full()
+            .child(
+                div()
+                    .id("icon-button")
+                    .size(px(24.))
+                    .hover(|s| s.bg(rgb(0x333333)))
+                    .on_click(|_, _, _| {})
+                    .child(div().size(px(16.))),
+            )
+            .child(div().id("dot").size(px(8.)).with_animation(
+                "pulse",
+                gpui::Animation::new(std::time::Duration::from_millis(1200)).repeat(),
+                |el, t| el.opacity(t),
+            ))
+    }
+}
+
+#[gpui::test]
+fn snapshot_records_state_styles_input_and_animations(cx: &mut TestAppContext) {
+    let window = cx.add_window(|_, _| Controls);
+    let snapshot = cx
+        .update_window(window.into(), |_, window, cx| {
+            window.request_ui_snapshot();
+            window.draw(cx).clear(cx);
+            window.take_ui_snapshot()
+        })
+        .unwrap()
+        .unwrap();
+
+    let button = snapshot
+        .nodes
+        .iter()
+        .find_map(|node| match &node.kind {
+            UiNodeKind::Element {
+                states,
+                interaction,
+                ..
+            } if interaction.clickable => Some((states.clone(), interaction.clone())),
+            _ => None,
+        })
+        .expect("the clickable button");
+    assert!(button.0.hover.is_some());
+    assert!(!button.1.tooltip && !button.1.focusable);
+
+    let (index, duration, oneshot, easing) = snapshot
+        .nodes
+        .iter()
+        .enumerate()
+        .find_map(|(i, node)| match &node.kind {
+            UiNodeKind::Animation {
+                duration,
+                oneshot,
+                easing,
+            } => Some((i, *duration, *oneshot, easing.clone())),
+            _ => None,
+        })
+        .expect("the animation wrapper");
+    assert_eq!(duration, std::time::Duration::from_millis(1200));
+    assert!(!oneshot);
+    assert_eq!(easing.len(), 11);
+    assert!(snapshot.nodes.iter().any(|node| node.parent == Some(index)));
 }

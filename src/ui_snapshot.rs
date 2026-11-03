@@ -6,8 +6,12 @@
 //! without cache reuse and records each element and text run it paints.
 //! [`Window::take_ui_snapshot`] then returns the result.
 
-use crate::{Bounds, ContentMask, Hsla, Pixels, SharedString, Size, Style, TextStyle, Window};
+use crate::{
+    Bounds, ContentMask, Hsla, Pixels, SharedString, Size, Style, StyleRefinement, TextStyle,
+    Window,
+};
 use std::panic::Location;
+use std::time::Duration;
 
 /// What one frame painted, in paint order (parents before children).
 #[derive(Clone, Debug, Default)]
@@ -48,6 +52,19 @@ pub enum UiNodeKind {
         style: Box<Style>,
         /// Size of the children, larger than `bounds` when the content overflows.
         content_size: Size<Pixels>,
+        /// Styles the element switches to, whether or not they apply right now.
+        states: UiStates,
+        /// How the element takes input.
+        interaction: UiInteraction,
+    },
+    /// A `with_animation` wrapper; the animated element is its child.
+    Animation {
+        /// Length of one run.
+        duration: Duration,
+        /// Whether it runs once rather than repeating.
+        oneshot: bool,
+        /// The easing curve sampled at t = 0, 0.1, ..., 1.
+        easing: Vec<f32>,
     },
     /// Shaped text.
     Text {
@@ -66,6 +83,42 @@ pub enum UiNodeKind {
         /// Per-run colors, as `(byte length, color, background)`.
         runs: Vec<(u32, Hsla, Option<Hsla>)>,
     },
+}
+
+/// The state styles an element declares (`.hover(..)`, `.active(..)`, `.focus(..)`).
+#[derive(Clone, Debug, Default)]
+pub struct UiStates {
+    /// `.hover(..)`.
+    pub hover: Option<Box<StyleRefinement>>,
+    /// `.active(..)`.
+    pub active: Option<Box<StyleRefinement>>,
+    /// `.focus(..)`.
+    pub focus: Option<Box<StyleRefinement>>,
+    /// `.focus_visible(..)`.
+    pub focus_visible: Option<Box<StyleRefinement>>,
+}
+
+/// Input facts about an element.
+#[derive(Clone, Debug, Default)]
+pub struct UiInteraction {
+    /// It has click or mouse-down handlers.
+    pub clickable: bool,
+    /// It tracks a focus handle, so the keyboard can reach it.
+    pub focusable: bool,
+    /// It holds focus in this frame.
+    pub focused: bool,
+    /// The pointer is over it in this frame.
+    pub hovered: bool,
+    /// It shows a tooltip.
+    pub tooltip: bool,
+    /// Its explicit tab index, if any.
+    pub tab_index: Option<isize>,
+    /// It sets a key context for its actions.
+    pub key_context: bool,
+    /// Number of action handlers it registers.
+    pub actions: usize,
+    /// Its accessible label, if set.
+    pub label: Option<SharedString>,
 }
 
 #[derive(Default)]
@@ -132,6 +185,7 @@ impl Window {
         Some(recording.nodes.len() - 1)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn enter_ui_element(
         &mut self,
         source: Option<&'static Location<'static>>,
@@ -139,11 +193,41 @@ impl Window {
         bounds: Bounds<Pixels>,
         style: &Style,
         content_size: Size<Pixels>,
+        states: UiStates,
+        interaction: UiInteraction,
     ) -> bool {
         let kind = UiNodeKind::Element {
             style: Box::new(style.clone()),
             content_size,
+            states,
+            interaction,
         };
+        self.enter_ui_node(source, id, bounds, kind)
+    }
+
+    pub(crate) fn enter_ui_animation(
+        &mut self,
+        bounds: Bounds<Pixels>,
+        duration: Duration,
+        oneshot: bool,
+        easing: &dyn Fn(f32) -> f32,
+    ) -> bool {
+        let easing = (0..=10).map(|i| easing(i as f32 / 10.0)).collect();
+        let kind = UiNodeKind::Animation {
+            duration,
+            oneshot,
+            easing,
+        };
+        self.enter_ui_node(None, None, bounds, kind)
+    }
+
+    fn enter_ui_node(
+        &mut self,
+        source: Option<&'static Location<'static>>,
+        id: Option<SharedString>,
+        bounds: Bounds<Pixels>,
+        kind: UiNodeKind,
+    ) -> bool {
         match self.push_ui_node(source, id, bounds, kind) {
             Some(index) => {
                 self.ui_snapshot.stack.push(index);
