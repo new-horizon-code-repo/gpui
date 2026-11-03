@@ -2136,21 +2136,13 @@ impl WgpuRendererCore {
     /// Copies `texture` back to the CPU as RGBA. Dimensions come from the texture
     /// itself, so the copy can never disagree with what was rendered.
     fn read_texture(&self, texture: &wgpu::Texture) -> anyhow::Result<image::RgbaImage> {
-        anyhow::ensure!(
-            matches!(
-                texture.format(),
-                wgpu::TextureFormat::Bgra8Unorm
-                    | wgpu::TextureFormat::Bgra8UnormSrgb
-                    | wgpu::TextureFormat::Rgba8Unorm
-                    | wgpu::TextureFormat::Rgba8UnormSrgb
-            ),
-            "cannot read back a {:?} texture",
-            texture.format()
-        );
+        let bytes_per_pixel = readback_bytes_per_pixel(texture.format()).ok_or_else(|| {
+            anyhow::anyhow!("cannot read back a {:?} texture", texture.format())
+        })?;
         let width = texture.width();
         let height = texture.height();
         let bytes_per_row = width
-            .checked_mul(4)
+            .checked_mul(bytes_per_pixel)
             .ok_or_else(|| anyhow::anyhow!("Capture render target row size overflowed"))?;
         let padded_bytes_per_row = bytes_per_row
             .checked_next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
@@ -2236,17 +2228,88 @@ impl WgpuRendererCore {
         drop(mapped_data);
         readback_buffer.unmap();
 
-        if matches!(
-            texture.format(),
-            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
-        ) {
-            for pixel in pixels.chunks_exact_mut(4) {
+        image::RgbaImage::from_raw(width, height, to_rgba8(texture.format(), pixels))
+            .ok_or_else(|| anyhow::anyhow!("Failed to create image from captured pixel data"))
+    }
+}
+
+// Fork (new-horizon-code-repo/gpui): surface formats readback can turn into RGBA8.
+// Surfaces fall back to 10-bit or half-float formats on some drivers.
+#[cfg(not(target_family = "wasm"))]
+fn readback_bytes_per_pixel(format: wgpu::TextureFormat) -> Option<u32> {
+    use wgpu::TextureFormat as F;
+    match format {
+        F::Bgra8Unorm | F::Bgra8UnormSrgb | F::Rgba8Unorm | F::Rgba8UnormSrgb | F::Rgb10a2Unorm => {
+            Some(4)
+        }
+        F::Rgba16Float => Some(8),
+        _ => None,
+    }
+}
+
+/// Tightly packed texels of a `readback_bytes_per_pixel` format to RGBA8.
+#[cfg(not(target_family = "wasm"))]
+fn to_rgba8(format: wgpu::TextureFormat, mut texels: Vec<u8>) -> Vec<u8> {
+    use wgpu::TextureFormat as F;
+    match format {
+        F::Bgra8Unorm | F::Bgra8UnormSrgb => {
+            for pixel in texels.chunks_exact_mut(4) {
                 pixel.swap(0, 2);
             }
+            texels
         }
+        F::Rgb10a2Unorm => texels
+            .chunks_exact(4)
+            .flat_map(|texel| {
+                let v = u32::from_le_bytes([texel[0], texel[1], texel[2], texel[3]]);
+                let scale = |shift: u32, max: u32| ((((v >> shift) & max) * 255 + max / 2) / max) as u8;
+                [scale(0, 1023), scale(10, 1023), scale(20, 1023), scale(30, 3)]
+            })
+            .collect(),
+        F::Rgba16Float => texels
+            .chunks_exact(2)
+            .map(|half| {
+                let value = f16_to_f32(u16::from_le_bytes([half[0], half[1]]));
+                // NaN casts to 0.
+                (value.clamp(0.0, 1.0) * 255.0).round() as u8
+            })
+            .collect(),
+        _ => texels,
+    }
+}
 
-        image::RgbaImage::from_raw(width, height, pixels)
-            .ok_or_else(|| anyhow::anyhow!("Failed to create image from captured pixel data"))
+#[cfg(not(target_family = "wasm"))]
+fn f16_to_f32(half: u16) -> f32 {
+    let sign = if half & 0x8000 != 0 { -1.0 } else { 1.0 };
+    let exponent = i32::from((half >> 10) & 0x1f);
+    let fraction = f32::from(half & 0x3ff);
+    sign * match exponent {
+        0 => fraction * 2f32.powi(-24),
+        31 if fraction == 0.0 => f32::INFINITY,
+        31 => f32::NAN,
+        _ => (1.0 + fraction / 1024.0) * 2f32.powi(exponent - 15),
+    }
+}
+
+#[cfg(all(test, not(target_family = "wasm")))]
+mod readback_tests {
+    use super::to_rgba8;
+    use wgpu::TextureFormat;
+
+    #[test]
+    fn wide_surface_formats_read_back_as_rgba8() {
+        let ten_bit: u32 = 1023 | (512 << 20) | (3 << 30);
+        assert_eq!(
+            to_rgba8(TextureFormat::Rgb10a2Unorm, ten_bit.to_le_bytes().to_vec()),
+            [255, 0, 128, 255]
+        );
+        // 1.0, 0.0, 0.5 and 2.0, which clamps.
+        let halves = [0x3c00u16, 0x0000, 0x3800, 0x4000]
+            .iter()
+            .flat_map(|half| half.to_le_bytes())
+            .collect();
+        assert_eq!(to_rgba8(TextureFormat::Rgba16Float, halves), [255, 0, 128, 255]);
+        assert_eq!(to_rgba8(TextureFormat::Bgra8Unorm, vec![1, 2, 3, 4]), [3, 2, 1, 4]);
     }
 }
 
