@@ -19,9 +19,9 @@ name = "gpui_wgpu"
 
 [features]
 default = []
-bench-support = ["gpui/bench-support", "dep:image"]
+bench-support = ["gpui/bench-support"]
 font-kit = ["dep:font-kit"]
-test-support = ["gpui/test-support", "dep:image"]
+test-support = ["gpui/test-support"]
 
 [dependencies]
 gpui = { workspace = true }
@@ -31,7 +31,7 @@ collections = { workspace = true }
 cosmic-text = "0.19.0"
 etagere = { workspace = true }
 itertools = { workspace = true }
-image = { workspace = true, optional = true }
+image = { workspace = true }
 log = { workspace = true }
 parking_lot = { workspace = true }
 profiling = { workspace = true }
