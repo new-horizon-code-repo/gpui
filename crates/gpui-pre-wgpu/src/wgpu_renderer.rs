@@ -263,6 +263,8 @@ pub struct WgpuRenderer {
     observed_error_generation: u64,
     last_surface_error: Option<String>,
     needs_redraw: bool,
+    // Fork (new-horizon-code-repo/gpui): the size `draw` last rendered at, for capture.
+    last_frame_size: Option<Size<DevicePixels>>,
 }
 
 impl WgpuRenderer {
@@ -516,6 +518,7 @@ impl WgpuRenderer {
             observed_error_generation: 0,
             last_surface_error: None,
             needs_redraw: false,
+            last_frame_size: None,
         })
     }
 }
@@ -1216,6 +1219,7 @@ impl WgpuRenderer {
             width: DevicePixels(frame.texture.width() as i32),
             height: DevicePixels(frame.texture.height() as i32),
         };
+        self.last_frame_size = Some(size);
         let frame_view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -2315,21 +2319,71 @@ mod readback_tests {
 
 impl WgpuRenderer {
     // Fork (new-horizon-code-repo/gpui): window capture without presenting.
-    /// Renders `scene` into an offscreen texture the size of the surface, with this
-    /// window's device and sprite atlas, and reads it back as RGBA. Nothing is
-    /// presented, so it works whether or not the window is visible or covered.
+    /// Renders `scene` into an offscreen texture the size of the last drawn frame,
+    /// with this window's device and sprite atlas, and reads it back as RGBA. Nothing
+    /// is presented, so it works whether or not the window is visible or covered.
+    /// GPU errors are caught in the capture's own error scopes: they fail the
+    /// capture and are not charged to the next `draw`.
     #[cfg(not(target_family = "wasm"))]
     pub fn render_to_image(&mut self, scene: &Scene) -> Result<image::RgbaImage> {
-        let size = Size {
+        anyhow::ensure!(
+            !self.device_errors.device_lost(),
+            "the GPU device was lost; try again after the next frame"
+        );
+        // What `draw` rendered at (the acquired texture), so the image matches the
+        // screen and the shared path intermediates keep their size.
+        let size = self.last_frame_size.unwrap_or(Size {
             width: DevicePixels(self.surface_config.width as i32),
             height: DevicePixels(self.surface_config.height as i32),
-        };
+        });
         let premultiplied_alpha =
             self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
+        // An opaque surface shows color over black, not over transparency.
+        let clear_color = if self.surface_config.alpha_mode == wgpu::CompositeAlphaMode::Opaque {
+            wgpu::Color::BLACK
+        } else {
+            wgpu::Color::TRANSPARENT
+        };
         let core = self
             .core_mut()
             .context("the renderer was released; there is nothing to capture")?;
-        let texture = core
+        anyhow::ensure!(
+            readback_bytes_per_pixel(core.target_format).is_some(),
+            "cannot read back the {:?} surface format",
+            core.target_format
+        );
+        let device = Arc::clone(&core.resources.device);
+        let scopes = [
+            wgpu::ErrorFilter::Validation,
+            wgpu::ErrorFilter::OutOfMemory,
+            wgpu::ErrorFilter::Internal,
+        ]
+        .map(|filter| device.push_error_scope(filter));
+        let image = core.render_to_image(scene, size, premultiplied_alpha, clear_color);
+        let mut gpu_error = None;
+        for scope in scopes.into_iter().rev() {
+            if let Some(error) = gpui::block_on(scope.pop()) {
+                gpu_error.get_or_insert(error.to_string());
+            }
+        }
+        if let Some(error) = gpu_error {
+            anyhow::bail!("GPU error during capture: {error}");
+        }
+        image
+    }
+}
+
+#[cfg(not(target_family = "wasm"))]
+impl WgpuRendererCore {
+    /// Renders `scene` offscreen at `size` and reads it back as RGBA8.
+    fn render_to_image(
+        &mut self,
+        scene: &Scene,
+        size: Size<DevicePixels>,
+        premultiplied_alpha: bool,
+        clear_color: wgpu::Color,
+    ) -> Result<image::RgbaImage> {
+        let texture = self
             .resources
             .device
             .create_texture(&wgpu::TextureDescriptor {
@@ -2342,21 +2396,23 @@ impl WgpuRenderer {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: core.target_format,
+                format: self.target_format,
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             });
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        core.render_frame(
+        self.render_frame(
             scene,
             &view,
             size,
             premultiplied_alpha,
-            wgpu::Color::TRANSPARENT,
+            clear_color,
         )?;
-        core.read_texture(&texture)
+        self.read_texture(&texture)
     }
+}
 
+impl WgpuRenderer {
     /// Mark the surface as unconfigured so rendering is skipped until a new
     /// surface is provided via [`replace_surface`](Self::replace_surface).
     ///
