@@ -1,3 +1,28 @@
+# GPUI with UI snapshots (unofficial fork)
+
+This repository is an unofficial fork of [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui), Zed's GPU-accelerated UI framework. It is not made, endorsed, or supported by Zed Industries.
+
+- **Base:** `gpui-pre` 0.3.11 from crates.io, a snapshot of `zed-industries/zed` at `f816e1f`. The first commit is that published source, unmodified.
+- **Change:** a UI snapshot API. `Window::request_ui_snapshot()` makes the next frame repaint every view without cache reuse and record each painted element (bounds, clip, resolved style, content size, source location) and each piece of text (text as given and as shown, font size, line height, run colors). `Window::take_ui_snapshot()` returns it. Frames without a request record nothing.
+- **Why:** design-review tools such as [impeccable](https://github.com/Deichor/impeccable) need what the window actually painted to check contrast, text size, and overflow.
+
+Modified files carry a `Fork (new-horizon-code-repo/gpui)` comment at each change: `Cargo.toml`, `src/gpui.rs`, `src/window.rs`, `src/view.rs`, `src/elements/div.rs`, `src/elements/text.rs`. New files: `src/ui_snapshot.rs`, `tests/ui_snapshot.rs`.
+
+Use it in place of `gpui-pre` with a Cargo patch, so `gpui-pre-platform` and other snapshot crates build against it:
+
+```toml
+[patch.crates-io]
+gpui-pre = { git = "https://github.com/new-horizon-code-repo/gpui", branch = "main" }
+```
+
+Run the fork's test with `cargo test --features test-support --test ui_snapshot`.
+
+## License
+
+Apache-2.0, like upstream GPUI. See [LICENSE-APACHE](LICENSE-APACHE). Copyright for the original code stays with Zed Industries, Inc.
+
+---
+
 # Welcome to GPUI!
 
 GPUI is a hybrid immediate and retained mode, GPU accelerated, UI framework

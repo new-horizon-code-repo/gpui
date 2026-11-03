@@ -275,6 +275,12 @@ path = "examples/window_shadow.rs"
 name = "action_macros"
 path = "tests/action_macros.rs"
 
+# Fork (new-horizon-code-repo/gpui): UI snapshot test.
+[[test]]
+name = "ui_snapshot"
+path = "tests/ui_snapshot.rs"
+required-features = ["test-support"]
+
 [dependencies.accesskit]
 version = "0.24.0"
 features = ["enumn"]

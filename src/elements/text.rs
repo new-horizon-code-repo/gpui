@@ -797,6 +797,8 @@ impl TextLayout {
     }
 
     fn paint(&self, text: &str, window: &mut Window, cx: &mut App) {
+        // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+        self.record_ui_text(Some(text), window);
         self.paint_lines(TextPaintPass::All, window, cx)
             .with_context(|| format!("failed to paint {text}"))
             .unwrap();
@@ -811,7 +813,46 @@ impl TextLayout {
 
     /// Paints the glyphs and decorations of the text without the run backgrounds.
     pub fn paint_foreground(&self, window: &mut Window, cx: &mut App) -> anyhow::Result<()> {
+        // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+        self.record_ui_text(None, window);
         self.paint_lines(TextPaintPass::Foreground, window, cx)
+    }
+
+    // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+    fn record_ui_text(&self, text: Option<&str>, window: &mut Window) {
+        if !window.is_recording_ui_snapshot() {
+            return;
+        }
+        let element_state = self.0.borrow();
+        let Some(state) = element_state.as_ref() else {
+            return;
+        };
+        let Some(bounds) = state.bounds else {
+            return;
+        };
+        let shown: Vec<&str> = state.lines.iter().map(|line| line.text.as_ref()).collect();
+        let shown = SharedString::from(shown.join("\n"));
+        let runs = state
+            .lines
+            .iter()
+            .flat_map(|line| line.decoration_runs.iter())
+            .map(|run| (run.len, run.color, run.background_color))
+            .collect();
+        let font_size = state
+            .lines
+            .first()
+            .map(|line| line.unwrapped_layout.font_size)
+            .unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()));
+        window.record_ui_text(
+            text.map(|text| SharedString::from(text.to_string()))
+                .unwrap_or_else(|| shown.clone()),
+            shown,
+            bounds,
+            font_size,
+            state.line_height,
+            state.size.unwrap_or_default(),
+            runs,
+        );
     }
 
     fn paint_lines(

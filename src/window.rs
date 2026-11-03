@@ -1304,6 +1304,8 @@ pub struct Window {
     #[cfg(feature = "profiler")]
     debug_frame_overlay: crate::debug_overlay::DebugFrameOverlay,
     pub(crate) a11y: A11y,
+    // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+    pub(crate) ui_snapshot: crate::ui_snapshot::UiSnapshotState,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -2424,6 +2426,7 @@ impl Window {
             inspector: None,
             #[cfg(feature = "profiler")]
             debug_frame_overlay: crate::debug_overlay::DebugFrameOverlay::new(),
+            ui_snapshot: Default::default(),
             a11y: A11y::new(
                 a11y_active_flag,
                 accessibility_force_disabled,
@@ -3686,7 +3689,10 @@ impl Window {
             }
         }
         if !cx.mode.skip_drawing() {
+            // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+            self.begin_ui_snapshot();
             self.draw_roots(cx);
+            self.end_ui_snapshot();
             #[cfg(feature = "profiler")]
             {
                 let viewport_size = self.viewport_size;

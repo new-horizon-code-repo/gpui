@@ -2595,6 +2595,16 @@ impl Interactivity {
                     tab_group = self.tab_index;
                 }
 
+                // Fork (new-horizon-code-repo/gpui): UI snapshot hook.
+                let recorded = window.is_recording_ui_snapshot()
+                    && window.enter_ui_element(
+                        self.source_location(),
+                        global_id.map(|id| id.to_string().into()),
+                        bounds,
+                        &style,
+                        self.content_size,
+                    );
+
                 window.with_element_opacity(style.opacity, |window| {
                     style.paint(bounds, window, cx, |window: &mut Window, cx: &mut App| {
                         window.with_text_style(style.text_style().cloned(), |window| {
@@ -2686,6 +2696,10 @@ impl Interactivity {
                         });
                     });
                 });
+
+                if recorded {
+                    window.exit_ui_element();
+                }
 
                 ((), element_state)
             },
