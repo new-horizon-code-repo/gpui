@@ -18,6 +18,8 @@ pub struct UiSnapshot {
     pub viewport: Size<Pixels>,
     /// Pixels per logical pixel.
     pub scale_factor: f32,
+    /// Size of one rem, for resolving rem lengths in recorded styles.
+    pub rem_size: Pixels,
 }
 
 /// One painted element or piece of text.
@@ -98,6 +100,7 @@ impl Window {
                 nodes: Vec::new(),
                 viewport: self.viewport_size(),
                 scale_factor: self.scale_factor(),
+                rem_size: self.rem_size(),
             });
         }
     }
